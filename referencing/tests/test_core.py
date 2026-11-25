@@ -681,6 +681,44 @@ class TestResource:
         resolver = Registry().resolver()
         assert resource.pointer("/foo/bar/0", resolver=resolver).contents == 3
 
+    @pytest.mark.parametrize("contents", ["xyz", "", 12, 1.5, True, None])
+    @pytest.mark.parametrize("segment", ["0", "name", ""])
+    def test_pointer_cannot_descend_into_scalar(self, contents, segment):
+        resource = Resource.opaque(contents={"value": contents})
+        resolver = Registry().resolver()
+        pointer = f"/value/{segment}"
+        with pytest.raises(exceptions.PointerToNowhere) as error:
+            resource.pointer(pointer, resolver=resolver)
+        assert error.value == exceptions.PointerToNowhere(
+            ref=pointer,
+            resource=resource,
+        )
+
+    def test_lookup_cannot_descend_into_string(self):
+        resource = Resource.opaque(contents={"value": "xyz"})
+        resolver = Registry().resolver_with_root(resource)
+        with pytest.raises(exceptions.PointerToNowhere):
+            resolver.lookup("#/value/0")
+
+    @pytest.mark.parametrize("contents", ["xyz", "", 12, 1.5, True, None])
+    def test_pointer_to_scalar(self, contents):
+        resource = Resource.opaque(contents={"value": contents})
+        resolver = Registry().resolver()
+        resolved = resource.pointer("/value", resolver=resolver)
+        assert resolved.contents == contents
+        root = Resource.opaque(contents).pointer("", resolver=resolver)
+        assert root.contents == contents
+
+    def test_pointer_to_sequence_and_mapping(self):
+        from collections import UserDict, UserList
+
+        resource = Resource.opaque(
+            contents=UserDict({"value": UserList(["xyz"])}),
+        )
+        resolver = Registry().resolver()
+        resolved = resource.pointer("/value/0", resolver=resolver)
+        assert resolved.contents == "xyz"
+
     def test_root_pointer(self):
         contents = {"foo": "baz"}
         resource = Resource.opaque(contents=contents)
